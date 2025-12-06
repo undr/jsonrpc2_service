@@ -7,6 +7,8 @@ defmodule JSONRPC2.Service.MixProject do
       version: "0.1.0",
       elixir: "~> 1.18",
       start_permanent: Mix.env() == :prod,
+      description: description(),
+      package: package(),
       deps: deps()
     ]
   end
@@ -16,6 +18,19 @@ defmodule JSONRPC2.Service.MixProject do
     [
       extra_applications: [:logger]
     ]
+  end
+
+  defp package do
+    [
+      maintainers: ["undr@yandex.ru"],
+      licenses: ["MIT"],
+      links: %{"GitHub" => "https://github.com/undr/jsonrpc2_service"}
+    ]
+  end
+
+  defp description do
+    "Provides the ability to create services in accordance with the JSONRPC 2.0 specification. " <>
+      "There is no transport layer, but only tools for creating transport-independent JSONRPC 2.0 services."
   end
 
   # Run "mix help deps" to learn about dependencies.
