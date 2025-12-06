@@ -1,6 +1,6 @@
 # JSONRPC2.Service
 
-Provides an ability to create services according to the JSONRPC 2.0 specification.
+Provides the ability to create services in accordance with the JSONRPC 2.0 specification. There is no transport layer, but only tools for creating transport-independent JSONRPC 2.0 services.
 
 ## Installation
 
