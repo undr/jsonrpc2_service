@@ -32,6 +32,7 @@ defmodule JSONRPC2.Service do
 
   alias JSONRPC2.Spec.Request
   alias JSONRPC2.Spec.Response
+  alias JSONRPC2.Telemetry
 
   defmacro __using__(_) do
     quote location: :keep do
@@ -55,11 +56,19 @@ defmodule JSONRPC2.Service do
           %Error{jsonrpc: "2.0", id: 2, error: %{code: 12345, message: "divided by zero"}}
       """
       def handle(%{"_json" => body_params}, conn) when is_list(body_params) do
-        Enum.map(body_params, fn(one) -> handle_one(one, conn) end) |> drop_nils()
+        meta = %{req: body_params, ctx: conn}
+        Telemetry.span(:service, meta, fn ->
+          res = Enum.map(body_params, fn(one) -> handle_one(one, conn) end) |> drop_nils()
+          {res, Map.put(meta, :res, res)}
+        end)
       end
 
       def handle(body_params, conn) when is_map(body_params) do
-        handle_one(body_params, conn)
+        meta = %{req: body_params, ctx: conn}
+        Telemetry.span(:service, meta, fn ->
+          res = handle_one(body_params, conn)
+          {res, Map.put(meta, :res, res)}
+        end)
       end
 
       defp handle_one(body_params, conn) do
@@ -98,6 +107,8 @@ defmodule JSONRPC2.Service do
       end
 
       defp exec_handler(handler, %Request{id: id, method: method, params: params} = request, conn) do
+        start_time = System.monotonic_time()
+
         try do
           if is_nil(id) do
             handler.cast(params, conn)
@@ -106,12 +117,14 @@ defmodule JSONRPC2.Service do
           end
         rescue
           exception ->
+            Telemetry.exception(:service, start_time, :exception, exception, __STACKTRACE__, %{req: request, ctx: conn}, %{count: 1})
             handler.handle_exception(request, exception, __STACKTRACE__)
         catch
           :throw, {:jsonrpc2_error, code_or_tuple} ->
             {:jsonrpc2_error, code_or_tuple}
 
           kind, payload ->
+            Telemetry.exception(:service, start_time, kind, payload, __STACKTRACE__, %{req: request, ctx: conn}, %{count: 1})
             handler.handle_error(request, {kind, payload}, __STACKTRACE__)
         end
       end
