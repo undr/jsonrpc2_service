@@ -1,6 +1,5 @@
 defmodule JSONRPC2.Service.Method do
   alias JSONRPC2.Spec
-  alias JSONRPC2.Spec.Request
 
   @type result :: {:ok, any()} | {:error, any()} | {:jsonrpc2_error, any()}
 
@@ -83,13 +82,6 @@ defmodule JSONRPC2.Service.Method do
       defp error(code, message, data) do
         {:jsonrpc2_error, {code, message, data}}
       end
-
-      defp log_error(%Request{method: method, params: params}, {kind, payload}, stacktrace) do
-        Logger.error([
-          "Error in handler ", inspect(__MODULE__), " for method ", method, " with params: ",
-          inspect(params), ":\n\n", Exception.format(kind, payload, stacktrace)
-        ])
-      end
     end
   end
 
@@ -108,13 +100,11 @@ defmodule JSONRPC2.Service.Method do
       end
 
       def handle_exception(request, ex, stacktrace) do
-        log_error(request, {:error, ex}, stacktrace)
-        {:jsonrpc2_error, {:server_error, [ex: inspect(ex), message: Exception.format(:error, ex, stacktrace)]}}
+        {:jsonrpc2_error, {:server_error, %{ex: inspect(ex), message: Exception.format(:error, ex, stacktrace)}}}
       end
 
       def handle_error(request, {kind, payload}, stacktrace) do
-        log_error(request, {kind, payload}, stacktrace)
-        {:jsonrpc2_error, {:internal_error, [kind: inspect(kind), payload: inspect(payload)]}}
+        {:jsonrpc2_error, {:internal_error, %{kind: inspect(kind), payload: inspect(payload)}}}
       end
     end
   end

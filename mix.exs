@@ -4,7 +4,7 @@ defmodule JSONRPC2.Service.MixProject do
   def project do
     [
       app: :jsonrpc2_service,
-      version: "0.1.0",
+      version: "0.1.1",
       elixir: "~> 1.18",
       start_permanent: Mix.env() == :prod,
       description: description(),
@@ -37,7 +37,7 @@ defmodule JSONRPC2.Service.MixProject do
   defp deps do
     [
       {:gettext, "~> 1.0.2"},
-      {:jsonrpc2_spec, "~> 0.1.0"},
+      {:jsonrpc2_spec, "~> 0.1.1"},
       {:ex_doc, ">= 0.0.0", only: :dev, runtime: false}
     ]
   end

@@ -22,3 +22,4 @@ jsonrpc2_service-*.tar
 # Temporary files, for example, from tests.
 /tmp/
 /.elixir_ls/
+mix.lock
