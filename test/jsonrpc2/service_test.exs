@@ -129,4 +129,61 @@ defmodule JSONRPC2.ServiceTest do
       assert ^error = Enum.at(result, 1)
     end
   end
+
+  # The atom table is never garbage collected, so a name turned into an atom
+  # before it has been recognised is a permanent cost paid by whoever can reach
+  # the transport. Enough of them reach `system_limit` and take the VM down —
+  # not the process handling the request, the node.
+  describe ".handle and the atom table" do
+    test "an unknown method name does not become an atom" do
+      # One trip through the not-found path before the count is taken. The first
+      # one loads the modules that path touches, and loading a module adds its
+      # own atoms — a cost paid once per VM and unrelated to the request. What
+      # this test is about is the marginal cost of each further name, which is
+      # what a stream of them multiplies.
+      miss("warm_up")
+
+      before = :erlang.system_info(:atom_count)
+
+      for i <- 1..100, do: miss("no_such_method_#{i}")
+
+      assert :erlang.system_info(:atom_count) == before
+    end
+
+    test "a declared method still reaches its handler" do
+      assert %Result{result: "result"} =
+               TestService.handle(
+                 %{"id" => "123", "method" => "method3", "params" => %{}, "jsonrpc" => "2.0"},
+                 :conn
+               )
+    end
+
+    # The wire name is what dispatch is keyed by; the atom list stays as it was,
+    # because it is public and callers read it.
+    test "handlers are exposed under their wire names, beside the atom list" do
+      assert TestService.__service_handlers__() == %{
+               "method1" => Method1,
+               "method2" => Method2,
+               "method3" => Method3
+             }
+
+      assert Keyword.fetch(TestService.__service_methods__(), :method3) == {:ok, Method3}
+    end
+
+    # A method name of the wrong type is a malformed request, not a lookup.
+    test "a non-binary method name is not looked up at all" do
+      assert %Error{error: %{code: -32600}} =
+               TestService.handle(
+                 %{"id" => "123", "method" => 123, "params" => %{}, "jsonrpc" => "2.0"},
+                 :conn
+               )
+    end
+
+    defp miss(name) do
+      TestService.handle(
+        %{"id" => "123", "method" => name, "params" => %{}, "jsonrpc" => "2.0"},
+        :conn
+      )
+    end
+  end
 end

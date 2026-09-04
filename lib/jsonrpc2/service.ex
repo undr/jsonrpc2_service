@@ -102,8 +102,24 @@ defmodule JSONRPC2.Service do
         end
       end
 
-      defp handler_lookup(name) do
-        Keyword.fetch(__service_methods__(), String.to_atom(name))
+      # Looked up by the name as it arrived, never by an atom made from it.
+      #
+      # `String.to_atom/1` here turned every request into a permanent entry in
+      # the atom table, which is not garbage collected: a stream of requests
+      # naming methods that do not exist reaches `system_limit` and takes the
+      # whole VM down, along with everything else running on it. A service is
+      # usually reachable by whoever can reach its transport, so the name in a
+      # request is the least trusted string the library handles.
+      #
+      # The map is built at compile time from the same `method/2` declarations
+      # `__service_methods__/0` answers, so an unknown name costs one miss and
+      # nothing else.
+      defp handler_lookup(name) when is_binary(name) do
+        Map.fetch(__service_handlers__(), name)
+      end
+
+      defp handler_lookup(_name) do
+        :error
       end
 
       defp exec_handler(handler, %Request{id: id, method: method, params: params} = request, conn) do
@@ -159,10 +175,26 @@ defmodule JSONRPC2.Service do
     end
   end
 
-  defmacro __before_compile__(_env) do
+  defmacro __before_compile__(env) do
+    handlers =
+      env.module
+      |> Module.get_attribute(:__service_methods__)
+      |> List.wrap()
+      |> Map.new(fn {name, handler} -> {Atom.to_string(name), handler} end)
+
     quote location: :keep do
       def __service_methods__ do
         @__service_methods__
+      end
+
+      @doc """
+      The same methods, keyed by the name as it appears on the wire.
+
+      Built here rather than derived per request so that dispatch never has to
+      turn a request's method name into an atom — see `handler_lookup/1`.
+      """
+      def __service_handlers__ do
+        unquote(Macro.escape(handlers))
       end
     end
   end
