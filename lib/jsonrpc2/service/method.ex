@@ -124,9 +124,7 @@ defmodule JSONRPC2.Service.Method do
   end
 
   defp atomize_keys(params) when is_map(params) do
-    params
-    |> Enum.map(fn {k, v} -> {String.to_atom(k), atomize_keys(v)} end)
-    |> Enum.into(%{})
+    Map.new(params, fn {k, v} -> {atomize_key(k), atomize_keys(v)} end)
   end
 
   defp atomize_keys([head | rest]) do
@@ -135,5 +133,27 @@ defmodule JSONRPC2.Service.Method do
 
   defp atomize_keys(value) do
     value
+  end
+
+  # Existing atoms only. The atom table is not garbage collected, so a key
+  # turned into an atom before anything has recognised it is a permanent
+  # allocation charged to whoever can reach the transport — and enough of them
+  # reach `system_limit`, which takes the VM down rather than the request.
+  # The walk is recursive, so this covers every key of every nested object a
+  # request carries, not just the declared ones at the top.
+  #
+  # Nothing a method reads is lost by this. A field the handler names appears as
+  # an atom literal in the handler's own compiled code, and the handler is
+  # loaded by the time this runs — `handle/3` has just called `validate/1` on
+  # it. So every key worth matching on already exists; what stays a string is
+  # exactly what no code was going to match on anyway.
+  defp atomize_key(key) when is_binary(key) do
+    String.to_existing_atom(key)
+  rescue
+    ArgumentError -> key
+  end
+
+  defp atomize_key(key) do
+    key
   end
 end
