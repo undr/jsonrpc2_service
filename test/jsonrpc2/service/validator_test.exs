@@ -24,6 +24,15 @@ defmodule JSONRPC2.Service.ValidatorTest do
     assert :ok = Validator.not_empty().(nil)
   end
 
+  # The case the rule was written for and never asked about: an object that
+  # carries something. `%{}` as a pattern matches every map, so the rule used to
+  # answer "is empty" here too and refused every object a caller could send.
+  test ".not_empty accepts a map that carries something" do
+    assert :ok = Validator.not_empty().(%{"base" => 1})
+    assert :ok = Validator.not_empty().(%{a: nil})
+    assert :ok = Validator.not_empty().([1])
+  end
+
   test ".format" do
     assert {:error, "does not match format %{format}", [format: "some"]} = Validator.format(~r/some/).("xxx")
     assert {:error, "does not match format %{format}", [format: "some"]} = Validator.format(~r/some/).(123)

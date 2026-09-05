@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.2.1
+
+`not_empty/0` refused every map, not only the empty one.
+
+The rule matched its value against `%{}`, which as a *pattern* means "a map with at least these keys" and names none — so it matched `%{"base" => ...}` exactly as readily as `%{}`, and any field declared `[type(:object), not_empty()]` was unusable: every object a caller could send was answered "is empty". A map is now asked for its size instead. Strings and lists are unchanged, `nil` still passes.
+
+The test only ever passed the rule `%{}`, a value both readings agree on, which is why nothing caught it; it now also asks about a map that carries something.
+
 ## 0.2.0
 
 Nothing a request carries is turned into a new atom any more — not the method name, not the keys of `params`.

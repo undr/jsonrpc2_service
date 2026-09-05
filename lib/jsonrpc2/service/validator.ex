@@ -36,17 +36,37 @@ defmodule JSONRPC2.Service.Validator do
     end
   end
 
+  # A map is asked for its size rather than matched against `%{}`. As a pattern
+  # `%{}` says "a map with at least these keys", and it names none, so it
+  # matched every map there is and this rule answered "is empty" for a fully
+  # populated object. Nothing caught it because the test only ever passed it
+  # `%{}` — a value both readings agree on.
+  #
+  # `nil` passes, as it does in every other rule here: a missing field is
+  # `required/0`'s to report, and answering for it twice names two faults where
+  # the caller made one.
   @spec not_empty() :: validator()
   def not_empty do
     fn(value) ->
-      case value do
-        ""   -> {:error, "is empty", []}
-        []   -> {:error, "is empty", []}
-        %{}  -> {:error, "is empty", []}
-        _any -> :ok
+      if empty?(value) do
+        {:error, "is empty", []}
+      else
+        :ok
       end
     end
   end
+
+  defp empty?(""),
+    do: true
+
+  defp empty?([]),
+    do: true
+
+  defp empty?(value) when is_map(value),
+    do: map_size(value) == 0
+
+  defp empty?(_any),
+    do: false
 
   @spec format(Regex.t()) :: validator()
   def format(regex) do
