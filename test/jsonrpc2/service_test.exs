@@ -186,4 +186,53 @@ defmodule JSONRPC2.ServiceTest do
       )
     end
   end
+
+  # A :telemetry handler subscribes to an event NAME and to nothing else, so two services sharing
+  # one name are indistinguishable to every handler attached to it. These two prove a host can
+  # give each service a name of its own — and that a service which asks for nothing keeps the
+  # name the library emitted before the option existed.
+  describe "telemetry namespace" do
+    defmodule DefaultService do
+      use Service
+    end
+
+    defmodule NamespacedService do
+      use Service, telemetry: :operator_api
+    end
+
+    setup do
+      :telemetry.attach_many(
+        "service-telemetry-test",
+        [
+          [:jsonrpc2, :service, :start],
+          [:jsonrpc2, :service, :stop],
+          [:operator_api, :service, :start],
+          [:operator_api, :service, :stop]
+        ],
+        fn event, _measurements, _meta, pid -> send(pid, {:event, event}) end,
+        self()
+      )
+
+      on_exit(fn -> :telemetry.detach("service-telemetry-test") end)
+    end
+
+    test "a service without the option emits under :jsonrpc2" do
+      DefaultService.handle(request(), :conn)
+
+      assert_received {:event, [:jsonrpc2, :service, :start]}
+      assert_received {:event, [:jsonrpc2, :service, :stop]}
+      refute_received {:event, [:operator_api, :service, :start]}
+    end
+
+    test "a service with the option emits under its own namespace" do
+      NamespacedService.handle(request(), :conn)
+
+      assert_received {:event, [:operator_api, :service, :start]}
+      assert_received {:event, [:operator_api, :service, :stop]}
+      refute_received {:event, [:jsonrpc2, :service, :start]}
+    end
+
+    defp request,
+      do: %{"id" => "123", "method" => "nope", "params" => %{}, "jsonrpc" => "2.0"}
+  end
 end

@@ -19,6 +19,23 @@ defmodule JSONRPC2.Service do
 
       # and so on...
 
+  ## Telemetry
+
+  A service emits `[:jsonrpc2, :service, :start | :stop | :exception]`. Give it a namespace of
+  its own when a host runs more than one service:
+
+      defmodule OperatorService do
+        use JSONRPC2.Service, telemetry: :operator_api
+      end
+
+  The events then begin with that atom instead — `[:operator_api, :service, :start]` and so on.
+  This matters because a `:telemetry` handler subscribes to an event NAME and to nothing else:
+  while two services share a name, every handler attached to it receives both services' events
+  and cannot tell which is which, whatever it inspects. Separate names are what let a host report
+  on its services separately.
+
+  The default is `:jsonrpc2`, which is what the library emitted before the option existed.
+
   It privides `handle` function as a single entry point to the service.
 
       iex> CalculatorService.handle(%{"jsonrpc" => "2.0", "id" => 2, "method" => "add", "params" => [1, 2]})
@@ -34,8 +51,11 @@ defmodule JSONRPC2.Service do
   alias JSONRPC2.Spec.Response
   alias JSONRPC2.Telemetry
 
-  defmacro __using__(_) do
+  defmacro __using__(opts) do
+    telemetry = Keyword.get(opts, :telemetry, :jsonrpc2)
+
     quote location: :keep do
+      @__service_telemetry__ unquote(telemetry)
       @__service_methods__ []
 
       Module.register_attribute(__MODULE__, :__service_methods__, accumulate: true)
@@ -57,7 +77,7 @@ defmodule JSONRPC2.Service do
       """
       def handle(%{"_json" => body_params}, conn) when is_list(body_params) do
         meta = %{req: body_params, ctx: conn}
-        Telemetry.span(:service, meta, fn ->
+        Telemetry.span(@__service_telemetry__, :service, meta, fn ->
           res = Enum.map(body_params, fn(one) -> handle_one(one, conn) end) |> drop_nils()
           {res, Map.put(meta, :res, res)}
         end)
@@ -65,7 +85,7 @@ defmodule JSONRPC2.Service do
 
       def handle(body_params, conn) when is_map(body_params) do
         meta = %{req: body_params, ctx: conn}
-        Telemetry.span(:service, meta, fn ->
+        Telemetry.span(@__service_telemetry__, :service, meta, fn ->
           res = handle_one(body_params, conn)
           {res, Map.put(meta, :res, res)}
         end)
@@ -133,14 +153,14 @@ defmodule JSONRPC2.Service do
           end
         rescue
           exception ->
-            Telemetry.exception(:service, start_time, :exception, exception, __STACKTRACE__, %{req: request, ctx: conn}, %{count: 1})
+            Telemetry.exception(@__service_telemetry__, :service, start_time, :exception, exception, __STACKTRACE__, %{req: request, ctx: conn}, %{count: 1})
             handler.handle_exception(request, exception, __STACKTRACE__)
         catch
           :throw, {:jsonrpc2_error, code_or_tuple} ->
             {:jsonrpc2_error, code_or_tuple}
 
           kind, payload ->
-            Telemetry.exception(:service, start_time, kind, payload, __STACKTRACE__, %{req: request, ctx: conn}, %{count: 1})
+            Telemetry.exception(@__service_telemetry__, :service, start_time, kind, payload, __STACKTRACE__, %{req: request, ctx: conn}, %{count: 1})
             handler.handle_error(request, {kind, payload}, __STACKTRACE__)
         end
       end
